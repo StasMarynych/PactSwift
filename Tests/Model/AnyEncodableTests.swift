@@ -80,7 +80,7 @@ class AnyEncodableTests: XCTestCase {
 					"one": [1, 23.45],
 					"two": true
 				]
-			],
+			] as [String : Any],
 			for: .body
 		).encoded().node
 

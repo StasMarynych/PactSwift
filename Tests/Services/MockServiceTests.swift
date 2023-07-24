@@ -967,6 +967,7 @@ private extension MockServiceTests {
 		let regex_array: [TestRegex]?
 		let one_of_string: String?
 		let one_of_int: Int?
+		let contains_like: [String: String]?
 	}
 
 	struct GeneratorsTestModel: Decodable {

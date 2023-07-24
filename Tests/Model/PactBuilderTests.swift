@@ -273,12 +273,8 @@ class PactBuilderTests: XCTestCase {
 
 	func testPact_SetsMatcher_ContainsLike_NestedMatchers() throws {
 		let expected = [
-			[
-				"bar": "string1"
-			],
-			[
-				"baz": "string2"
-			]
+			"bar",
+			"baz"
 		]
 		let testBody: Any = [
 			"data": [
@@ -295,24 +291,23 @@ class PactBuilderTests: XCTestCase {
 
 		let testPact = prepareTestPact(responseBody: testBody)
 
-		let decoded = try JSONDecoder().decode(ContainsLikeNestedTestModel.self, from: testPact.data!)
+		let decoded = try JSONDecoder().decode(ContainsLikeTestModel.self, from: testPact.data!)
 		let testResult = try XCTUnwrap(decoded.interactions.first?.response.matchingRules.body.node)
-		let variants = try XCTUnwrap(testResult.matchers.variants)
+		let variants = try XCTUnwrap(testResult.matchers[0].variants)
 
-		XCTAssertTrue(testResult.matchers.match == "arrayContains")
-		XCTAssertTrue(variants.allSatisfy { expected.contains($0) })
+		XCTAssertTrue(testResult.matchers[0].match == "arrayContains")
+		XCTAssertTrue(variants[0].rules.keys.allSatisfy { expected.contains($0) })
 	}
 
 	func testPact_SetsMatcher_ContainsLike() throws {
 		let expected = [
-			["foo", "bar"],
-			["string1", "string2"]
+			""
 		]
 		let testBody: Any = [
 			"data": [
 				"foo": Matcher.ContainsLike([
-					["foo", "bar"],
-					["string1", "string2"]
+					Matcher.EachLike("string"),
+					Matcher.EachLike(1)
 				], useAllValues: false)
 			]
 		]
@@ -320,10 +315,10 @@ class PactBuilderTests: XCTestCase {
 		let testPact = prepareTestPact(responseBody: testBody)
 		let decoded = try JSONDecoder().decode(ContainsLikeTestModel.self, from: testPact.data!)
 		let testResult = try XCTUnwrap(decoded.interactions.first?.response.matchingRules.body.node)
-		let variants = try XCTUnwrap(testResult.matchers.variants)
+		let variants = try XCTUnwrap(testResult.matchers[0].variants)
 
-		XCTAssertTrue(testResult.matchers.match == "arrayContains")
-		XCTAssertTrue(variants.allSatisfy { expected.contains($0) })
+		XCTAssertTrue(testResult.matchers[0].match == "arrayContains")
+		XCTAssertTrue(variants[0].rules.keys.allSatisfy { expected.contains($0) })
 	}
 
 	// MARK: - Example generators
@@ -573,49 +568,22 @@ private extension PactBuilderTests {
 							case node = "$.data.foo"
 						}
 						struct TestMatchersModel: Decodable {
-							let matchers: TestTypeModel
+							let matchers: [TestTypeModel]
 							struct TestTypeModel: Decodable {
 								let match: String
-								let variants: [[String]]?
+								let variants: [Variant]?
 								let regex: String?
 								let value: String?
 								let min: Int?
 								let max: Int?
 							}
 						}
-					}
-				}
-			}
-		}
-	}
-
-	// This test model is tightly coupled with the ContainsLike Matcher for the purpouse of these tests
-	struct ContainsLikeNestedTestModel: Decodable {
-		let interactions: [TestInteractionModel]
-		struct TestInteractionModel: Decodable {
-			let response: TestResponseModel
-			struct TestResponseModel: Decodable {
-				let matchingRules: TestMatchingRulesModel
-				struct TestMatchingRulesModel: Decodable {
-					let body: TestNodeModel
-					struct TestNodeModel: Decodable {
-						let node: TestMatchersModel
-
-						enum CodingKeys: String, CodingKey {
-							case node = "$.data.foo"
-						}
-						struct TestMatchersModel: Decodable {
-							let matchers: TestTypeModel
-							struct TestTypeModel: Decodable {
-								let match: String
-								let variants: [[String: String]]?
-								let regex: String?
-								let value: String?
-								let min: Int?
-								let max: Int?
-							}
+						struct Variant: Decodable {
+							let index: Int
+							let rules: [String: TestMatchersModel]
 						}
 					}
+
 				}
 			}
 		}

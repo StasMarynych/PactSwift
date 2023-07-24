@@ -65,7 +65,7 @@ private extension PactBuilder {
 
 		switch elementToProcess {
 
-		// MARK: - Process Collections:
+			// MARK: - Process Collections:
 
 		case let array as [Any]:
 			let processedArray = try process(array, at: node, isEachLike: isEachLike)
@@ -75,7 +75,7 @@ private extension PactBuilder {
 			let processedDict = try process(dict, at: node)
 			processedElement = (node: AnyEncodable(processedDict.node), rules: processedDict.rules, generators: processedDict.generators)
 
-		// MARK: - Process Simple Types
+			// MARK: - Process Simple Types
 
 		case let string as String:
 			processedElement = (node: AnyEncodable(string), rules: [:], generators: [:])
@@ -92,11 +92,11 @@ private extension PactBuilder {
 		case let bool as Bool:
 			processedElement = (node: AnyEncodable(bool), rules: [:], generators: [:])
 
-		// MARK: - Process Matchers
+			// MARK: - Process Matchers
 
-		// NOTE: There is a bug in Swift on macOS 10.x where type casting against a protocol does not work as expected.
-		// Works fine running on macOS 11.x!
-		// That is why each Matcher type is explicitly stated in its own case statement and is not DRY.
+			// NOTE: There is a bug in Swift on macOS 10.x where type casting against a protocol does not work as expected.
+			// Works fine running on macOS 11.x!
+			// That is why each Matcher type is explicitly stated in its own case statement and is not DRY.
 		case let matcher as Matcher.DecimalLike:
 			processedElement = try processMatcher(matcher, at: node)
 
@@ -184,11 +184,11 @@ private extension PactBuilder {
 		case let matcher as Matcher.ContainsLike:
 			processedElement = try processContainsLikeMatcher(matcher, at: node)
 
-		// MARK: - Process Example generators
+			// MARK: - Process Example generators
 
-		// NOTE: There is a bug in Swift on macOS 10.x where type casting against a protocol does not work as expected.
-		// Works fine running on macOS 11.x!
-		// That is why each ExampleGenerator type is explicitly stated in its own case statement and is not DRY.
+			// NOTE: There is a bug in Swift on macOS 10.x where type casting against a protocol does not work as expected.
+			// Works fine running on macOS 11.x!
+			// That is why each ExampleGenerator type is explicitly stated in its own case statement and is not DRY.
 		case let exampleGenerator as ExampleGenerator.DateTime:
 			processedElement = try processExampleGenerator(exampleGenerator, at: node)
 
@@ -222,7 +222,7 @@ private extension PactBuilder {
 		case let exampleGenerator as ExampleGenerator.DateTimeExpression:
 			processedElement = try processExampleGenerator(exampleGenerator, at: node)
 
-		// Anything else is not considered safe to encode in PactSwift
+			// Anything else is not considered safe to encode in PactSwift
 
 		case let threwError as EncodingError:
 			throw threwError
@@ -288,24 +288,78 @@ private extension PactBuilder {
 
 	// Processes an `ContainsLike` matcher
 	func processContainsLikeMatcher(_ matcher: Matcher.ContainsLike, at node: String) throws -> ProcessingResult {
-		var processedMatcherValue: ProcessingResult
+		var processedValue = try process(matcher.variants, at: "", isEachLike: false)
 
-		let processedValue = try process(element: matcher.value, at: node)
-		let processedVariants = try process(matcher.variants, at: node, isEachLike: false)
+		let grouppedRulesByIndecies: [Int: [String: AnyEncodable]] = processedValue.rules
+			.reduce(into: [:]) { partialResult, element in
 
-		processedMatcherValue = (
-			node: matcher.useAllValues ? AnyEncodable(processedVariants.node) : processedValue.node,
-			rules: processedVariants.rules,
-			generators: processedVariants.generators
+				let shouldOmmitEmptyStrings: Bool
+				let key: String
+
+				if element.key.contains(".") {
+					shouldOmmitEmptyStrings = true
+					key = element.key
+				} else {
+					shouldOmmitEmptyStrings = false
+					key = "\(element.key)."
+				}
+
+				let keyComponents = key.split(
+					separator: ".",
+					maxSplits: 1,
+					omittingEmptySubsequences: shouldOmmitEmptyStrings
+				)
+
+				guard keyComponents.count == 2 else {
+					return
+				}
+
+				// format: [i], i - index
+				let indexComponent = keyComponents[0]
+				let indexString = indexComponent
+					.replacingOccurrences(of: "[", with: "")
+					.replacingOccurrences(of: "]", with: "")
+
+				let matcherKey = String(keyComponents[1])
+
+				guard let index = Int(indexString) else {
+					return
+				}
+
+				if partialResult.keys.contains(index) {
+					partialResult[index]?[matcherKey] = element.value
+				} else {
+					partialResult[index] = [matcherKey: element.value]
+				}
+			}
+
+		let mappedVariants = matcher.variants
+			.indices
+			.compactMap { index in
+				let mapped = Int(index)
+
+				return grouppedRulesByIndecies[mapped].map {
+					AnyEncodable([
+						"index": AnyEncodable(mapped),
+						"rules": AnyEncodable($0)
+					])
+				}
+			}
+		
+		processedValue.rules = [node: AnyEncodable([
+			"matchers": AnyEncodable([
+				[
+					"match": AnyEncodable("arrayContains"),
+					"variants": AnyEncodable(mappedVariants),
+				],
+			]),
+		])]
+
+		return (
+			node: matcher.useAllValues ? AnyEncodable(processedValue.node) : processedValue.node[0],
+			rules: processedValue.rules,
+			generators: [:]
 		)
-		processedMatcherValue.rules[node] = AnyEncodable([
-			"matchers": [
-				"match": AnyEncodable("arrayContains"),
-				"variants": AnyEncodable(processedVariants.node)
-			]
-		])
-
-		return processedMatcherValue
 	}
 
 	// Processes an Example Generator

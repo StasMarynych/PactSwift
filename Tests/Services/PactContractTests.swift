@@ -70,7 +70,7 @@ class PactContractTests: XCTestCase {
 				// MARK: - Validate Interactions
 
 				let interactions = try XCTUnwrap(jsonObject["interactions"] as? [Any])
-				let numOfExpectedInteractions = 11
+				let numOfExpectedInteractions = 13
 
 				assert(
 					interactions.count == numOfExpectedInteractions,
@@ -184,6 +184,45 @@ class PactContractTests: XCTestCase {
 						}
 					},
 					"Not all expected generators found in Pact contract file for eachKeyLike matcher"
+				)
+
+				// Validate containsLike matcher from interaction
+
+				let expectedContainsLikePaths = [
+					"$.foo"
+				]
+
+				let containsLikeSimplerInteraction = try PactContractTests.extract(
+					.matchingRules,
+					in: .response,
+					interactions: interactions,
+					description: "Request for a an object with simpler contains like matcher"
+				)
+
+				assert(
+					expectedContainsLikePaths.allSatisfy { expectedKey in
+						containsLikeSimplerInteraction.contains { generatedKey, _ in
+							expectedKey == generatedKey
+						}
+					},
+					"Not all expected generators found in Pact contract file for containsLike matcher"
+				)
+
+				// Validate containsLike matcher from interaction
+				let containsLikeInteraction = try PactContractTests.extract(
+					.matchingRules,
+					in: .response,
+					interactions: interactions,
+					description: "Request for a an object with contains like matcher"
+				)
+
+				assert(
+					expectedContainsLikePaths.allSatisfy { expectedKey -> Bool in
+						containsLikeInteraction.contains { generatedKey, _ -> Bool in
+							expectedKey == generatedKey
+						}
+					},
+					"Not all expected generators found in Pact contract file for containsLike matcher"
 				)
 
 				// MARK: - Validate Generators
@@ -676,6 +715,90 @@ class PactContractTests: XCTestCase {
 
 		mockService.run { [unowned self] baseURL, done in
 			let url = URL(string: "\(baseURL)/articles/simpler/keyLikeMatcher")!
+			session
+				.dataTask(with: url) { data, response, error in
+					guard
+						error == nil,
+						(response as? HTTPURLResponse)?.statusCode == 200
+					else {
+						self.fail(function: #function, request: url.absoluteString, response: response.debugDescription, error: error)
+						return
+					}
+					done()
+				}
+				.resume()
+		}
+	}
+
+	func testPactContract_WithSimplerContainsLikeMatcher() {
+		mockService
+			.uponReceiving("Request for a an object with simpler contains like matcher")
+			.given("dynamic json")
+			.withRequest(method: .GET, path: "/articles/simpler/containsLikeMatcher")
+			.willRespondWith(
+				status: 200,
+				body: [
+					"foo": Matcher.ContainsLike([
+						[
+							"bar": [
+								"key1": Matcher.SomethingLike("value1"),
+								"key2": Matcher.IntegerLike(123)
+							]
+						],
+						[
+							"baz": [
+								"key3": Matcher.SomethingLike("value2"),
+								"key4": Matcher.IntegerLike(456)
+							]
+						]
+					], useAllValues: true)
+				]
+			)
+
+		mockService.run { [unowned self] baseURL, done in
+			let url = URL(string: "\(baseURL)/articles/simpler/containsLikeMatcher")!
+			session
+				.dataTask(with: url) { data, response, error in
+					guard
+						error == nil,
+						(response as? HTTPURLResponse)?.statusCode == 200
+					else {
+						self.fail(function: #function, request: url.absoluteString, response: response.debugDescription, error: error)
+						return
+					}
+					done()
+				}
+				.resume()
+		}
+	}
+
+	func testPactContract_WithContainsLikeMatcher() {
+		mockService
+			.uponReceiving("Request for a an object with contains like matcher")
+			.given("dynamic json")
+			.withRequest(method: .GET, path: "/articles/simpler/containsLikeMatcher")
+			.willRespondWith(
+				status: 200,
+				body: [
+					"foo": Matcher.ContainsLike([
+						[
+							"bar": [
+								"key1": Matcher.SomethingLike("value1"),
+								"key2": Matcher.IntegerLike(123)
+							] as [String : Any]
+						],
+						[
+							"baz": [
+								"key3": Matcher.SomethingLike("value2"),
+								"key4": Matcher.IntegerLike(456)
+							] as [String : Any]
+						]
+					], useAllValues: false)
+				]
+			)
+
+		mockService.run { [unowned self] baseURL, done in
+			let url = URL(string: "\(baseURL)/articles/simpler/containsLikeMatcher")!
 			session
 				.dataTask(with: url) { data, response, error in
 					guard
